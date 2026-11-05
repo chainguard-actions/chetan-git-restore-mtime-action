@@ -1,0 +1,52 @@
+name: Test working-directory restores mtimes from commit dates
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Create a fixture git repo with known commit dates
+        run: |
+          set -e
+          rm -rf "$RUNNER_TEMP/mtime-repo"
+          mkdir -p "$RUNNER_TEMP/mtime-repo/sub"
+          cd "$RUNNER_TEMP/mtime-repo"
+          git init -q
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+          echo one > a.txt
+          echo sub > sub/b.txt
+          git add a.txt sub/b.txt
+          GIT_AUTHOR_DATE="2020-01-01T00:00:00Z" GIT_COMMITTER_DATE="2020-01-01T00:00:00Z" \
+            git commit -q -m first
+          echo two > c.txt
+          echo one-modified > a.txt
+          git add a.txt c.txt
+          GIT_AUTHOR_DATE="2021-06-15T12:00:00Z" GIT_COMMITTER_DATE="2021-06-15T12:00:00Z" \
+            git commit -q -m second
+          # Make all mtimes "now" so the action has to change them
+          touch a.txt c.txt sub/b.txt
+          echo "MTIME_REPO=$RUNNER_TEMP/mtime-repo" >> "$GITHUB_ENV"
+      - id: action
+        uses: .
+        with:
+          working-directory: ${{ env.MTIME_REPO }}
+      - name: Assert mtimes match last commit touching each file
+        run: |
+          cd "$MTIME_REPO"
+          fail=0
+          check() {
+            actual=$(stat -c %Y "$1")
+            echo "$1: actual=$actual expected=$2"
+            if [ "$actual" != "$2" ]; then
+              echo "FAIL: $1 mtime mismatch"
+              fail=1
+            fi
+          }
+          # 2020-01-01T00:00:00Z = 1577836800, 2021-06-15T12:00:00Z = 1623758400
+          check sub/b.txt 1577836800
+          check a.txt 1623758400
+          check c.txt 1623758400
+          [ "$fail" = 0 ] || exit 1
+          echo "PASS"
