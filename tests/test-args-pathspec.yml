@@ -1,0 +1,43 @@
+name: Test args pathspec (only matching files restored)
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Create a git repo with two files
+        run: |
+          git config --global --add safe.directory '*'
+          rm -rf mtime-repo
+          mkdir -p mtime-repo
+          cd mtime-repo
+          git init -q .
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+          echo one > restore.txt
+          echo two > keep.txt
+          git add .
+          GIT_AUTHOR_DATE="2020-01-01T00:00:00Z" GIT_COMMITTER_DATE="2021-01-01T00:00:00Z" \
+            git commit -q -m "initial"
+          touch -d "2023-06-15T12:00:00Z" restore.txt keep.txt
+      - id: action
+        uses: .
+        with:
+          working-directory: mtime-repo
+          args: --no-directories restore.txt
+      - name: Assert only pathspec file restored
+        run: |
+          R=$(stat -c %Y mtime-repo/restore.txt)
+          K=$(stat -c %Y mtime-repo/keep.txt)
+          EXPECTED_K=$(date -d "2023-06-15T12:00:00Z" +%s)
+          echo "restore.txt: $R keep.txt: $K"
+          if [ "$R" != "1577836800" ]; then
+            echo "FAIL: restore.txt should be 1577836800"
+            exit 1
+          fi
+          if [ "$K" != "$EXPECTED_K" ]; then
+            echo "FAIL: keep.txt should be untouched ($EXPECTED_K)"
+            exit 1
+          fi
+          echo "PASS"

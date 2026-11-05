@@ -1,0 +1,40 @@
+name: Test basic usage (author time restored in working-directory)
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Create a git repo with a known commit date
+        run: |
+          git config --global --add safe.directory '*'
+          rm -rf mtime-repo
+          mkdir -p mtime-repo/sub
+          cd mtime-repo
+          git init -q .
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+          echo hello > a.txt
+          echo world > sub/b.txt
+          git add .
+          GIT_AUTHOR_DATE="2020-01-01T00:00:00Z" GIT_COMMITTER_DATE="2021-01-01T00:00:00Z" \
+            git commit -q -m "initial"
+          touch a.txt sub/b.txt
+          stat -c '%Y %n' a.txt sub/b.txt
+      - id: action
+        uses: .
+        with:
+          working-directory: mtime-repo
+      - name: Assert mtimes equal author date
+        run: |
+          cd mtime-repo
+          for f in a.txt sub/b.txt; do
+            ACTUAL=$(stat -c %Y "$f")
+            echo "$f mtime: $ACTUAL"
+            if [ "$ACTUAL" != "1577836800" ]; then
+              echo "FAIL: expected 1577836800 for $f"
+              exit 1
+            fi
+          done
+          echo "PASS"
