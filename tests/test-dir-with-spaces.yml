@@ -1,0 +1,34 @@
+name: Test working-directory with spaces
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Create a git repo in a path with spaces
+        run: |
+          set -e
+          D="$RUNNER_TEMP/my repo dir"
+          rm -rf "$D"
+          mkdir -p "$D"
+          cd "$D"
+          git init -q
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+          echo hello > "file one.txt"
+          git add .
+          GIT_AUTHOR_DATE="2019-03-10T08:30:00Z" GIT_COMMITTER_DATE="2019-03-10T08:30:00Z" git commit -q -m init
+          touch "file one.txt"
+      - id: action
+        uses: .
+        with:
+          working-directory: ${{ runner.temp }}/my repo dir
+      - name: Assert mtime restored
+        run: |
+          F="$RUNNER_TEMP/my repo dir/file one.txt"
+          A=$(stat -c %Y "$F")
+          E=$(date -u -d "2019-03-10T08:30:00Z" +%s)
+          echo "actual=$A expected=$E"
+          if [ "$A" != "$E" ]; then echo "FAIL: mtime not restored"; exit 1; fi
+          echo "PASS"

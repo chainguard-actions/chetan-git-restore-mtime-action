@@ -1,0 +1,24 @@
+name: Test default working-directory
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+      - name: Touch a tracked file
+        run: |
+          touch LICENSE
+          stat -c '%n %Y' LICENSE
+      - id: action
+        uses: .
+      - name: Assert LICENSE mtime matches its last commit time
+        run: |
+          A=$(stat -c %Y LICENSE)
+          E=$(git log -1 --format=%ct -- LICENSE)
+          echo "actual=$A expected=$E"
+          if [ -z "$E" ]; then echo "FAIL: could not get commit time"; exit 1; fi
+          if [ "$A" != "$E" ]; then echo "FAIL: LICENSE mtime not restored"; exit 1; fi
+          echo "PASS"

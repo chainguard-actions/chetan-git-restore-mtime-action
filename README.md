@@ -1,14 +1,90 @@
-# chetan/git-restore-mtime-action
+# git-restore-mtime action
 
-Restore file's modified time (timestamp) based on git commits
+A GitHub Workflow Action which restores timestamps of files in the current tree based on their last commit times. Uses the [git-restore-mtime](https://github.com/MestreLion/git-tools) script (v2025.08 release) by [@MestreLion](https://github.com/MestreLion).
 
-Hardened by [Chainguard](https://www.chainguard.dev) from the upstream action at [https://github.com/chetan/git-restore-mtime-action](https://github.com/chetan/git-restore-mtime-action).
+## Usage
 
-## Versions
+The sample workflow below illustrates a static site build and deploy using the
+[S3 Sync Action](https://github.com/jakejarvis/s3-sync-action). The `aws s3 sync` command relies on having the
+correct timestamps for the files to be uploaded, thus, we must reset them before
+running that action.
 
-| Version | Tag | Upstream commit | Hardening report |
-|---------|-----|-----------------|------------------|
-| v2.1.1 | [`v2.1.1`](https://github.com/chainguard-actions/chetan-git-restore-mtime-action/tree/v2.1.1) | [`cbf8161`](https://github.com/chetan/git-restore-mtime-action/commit/cbf8161ddb4e9b162409104954fb540e8a38c1da) | [`HARDENING.md`](https://github.com/chainguard-actions/chetan-git-restore-mtime-action/blob/v2.1.1/HARDENING.md) |
+__NOTE__: git-restore-mtime uses the ref log to find the correct timestamp
+for each file. This requires a full git history.  See `checkout dist` task in
+the example below.
+
+```yaml
+name: Build and Deploy
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4
+
+    # Note: This is *only* for the very next step, it is not required by
+    # git-restore-mtime-action.
+    - name: setup node
+      uses: actions/setup-node@v4
+      with:
+        node-version: 'latest'
+
+    # Run the build script which populates the ./dist folder
+    - name: build
+      run: |
+        yarn
+        yarn run build
+
+    # Merge ./dist into the 'gh-pages' branch (dist in this case)
+    - name: update dist branch
+      uses: peaceiris/actions-gh-pages@v2.3.1
+      env:
+        PERSONAL_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+        PUBLISH_BRANCH: dist
+        PUBLISH_DIR: ./dist
+
+    # Check out the new branch
+    - name: checkout dist
+      uses: actions/checkout@v4
+      with:
+        ref: dist
+        # git-restore-mtime-bare uses the ref log to find the correct timestamp
+        # for each file. This requires a full git history. The default value (1)
+        # creates a shallow checkout.
+        fetch-depth: 0
+
+    # Fix timestamps
+    - name: restore timestamps
+      uses: chetan/git-restore-mtime-action@v2
+
+    # Upload to S3
+    - name: sync s3
+      uses: jakejarvis/s3-sync-action@2fb81a9e9fea11e078587911c27754e42e6a6e88
+      with:
+        args: --exclude '.git*/*' --delete --follow-symlinks
+      env:
+        SOURCE_DIR: './'
+        AWS_REGION: 'us-east-1'
+        AWS_S3_BUCKET: ${{ secrets.AWS_S3_BUCKET }}
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+```
+
+### Configuration
+
+```yaml
+- name: restore timestamps
+  uses: chetan/git-restore-mtime-action@v2
+  with:
+    # Directory to change to before running the action. (Optional)
+    # Default: '.'
+    working-directory: '.'
+```
 
 ## Privacy
 

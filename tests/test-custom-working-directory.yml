@@ -1,0 +1,42 @@
+name: Test custom working-directory
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Create a git repo with dated commits
+        run: |
+          set -e
+          D="$RUNNER_TEMP/mtime-repo"
+          rm -rf "$D"
+          mkdir -p "$D/sub"
+          cd "$D"
+          git init -q
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+          echo one > a.txt
+          git add a.txt
+          GIT_AUTHOR_DATE="2020-01-01T00:00:00Z" GIT_COMMITTER_DATE="2020-01-01T00:00:00Z" git commit -q -m first
+          echo two > sub/b.txt
+          git add sub/b.txt
+          GIT_AUTHOR_DATE="2021-06-15T12:00:00Z" GIT_COMMITTER_DATE="2021-06-15T12:00:00Z" git commit -q -m second
+          touch a.txt sub/b.txt
+          stat -c '%n %Y' a.txt sub/b.txt
+      - id: action
+        uses: .
+        with:
+          working-directory: ${{ runner.temp }}/mtime-repo
+      - name: Assert mtimes restored from commits
+        run: |
+          D="$RUNNER_TEMP/mtime-repo"
+          A=$(stat -c %Y "$D/a.txt")
+          B=$(stat -c %Y "$D/sub/b.txt")
+          EA=$(date -u -d "2020-01-01T00:00:00Z" +%s)
+          EB=$(date -u -d "2021-06-15T12:00:00Z" +%s)
+          echo "a.txt: actual=$A expected=$EA"
+          echo "sub/b.txt: actual=$B expected=$EB"
+          if [ "$A" != "$EA" ]; then echo "FAIL: a.txt mtime"; exit 1; fi
+          if [ "$B" != "$EB" ]; then echo "FAIL: sub/b.txt mtime"; exit 1; fi
+          echo "PASS"
