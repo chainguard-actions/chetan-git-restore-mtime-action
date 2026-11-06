@@ -35,13 +35,13 @@ runs:
           "https://actions.enforce.dev/actions/v1/record" >/dev/null 2>&1 || true
     - shell: bash
       env:
-        INPUT_WORKING_DIRECTORY: ${{ inputs.working-directory }}
+        WORKING_DIRECTORY: ${{ inputs.working-directory }}
         INPUT_ARGS: ${{ inputs.args }}
       run: |
         args=()
         if [ -n "$INPUT_ARGS" ]; then
-          printf '%s' "$INPUT_ARGS" | xargs -r true   # fails on an unmatched quote
+          printf '%s' "$INPUT_ARGS" | xargs -r true >/dev/null
           while IFS= read -r -d '' t; do args+=("$t"); done \
-            < <(printf '%s' "$INPUT_ARGS" | xargs -r printf '%s\0')
+            < <(printf '%s' "$INPUT_ARGS" | xargs -r sh -c 'printf "%s\0" "$@"' sh)
         fi
-        cd "$INPUT_WORKING_DIRECTORY" && "$GITHUB_ACTION_PATH"/git-restore-mtime "${args[@]}"
+        cd "$WORKING_DIRECTORY" && "$GITHUB_ACTION_PATH"/git-restore-mtime "${args[@]}"

